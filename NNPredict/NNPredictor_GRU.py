@@ -58,9 +58,10 @@ class NNPredictor_GRU(ClassifierKerasLinear):
         inputs = tf.keras.Input(shape=(seq_len, num_features))
         x = inputs
         x = tf.keras.layers.Conv1D(filters=64, kernel_size=2, activation="relu", padding="causal")(x)
-        x = tf.keras.layers.GRU(32, return_sequences=False)(x)
+        x = tf.keras.layers.GRU(32, return_sequences=True)(x)
 
-        x = tf.keras.layers.Dense(8)(x)
+        # x = tf.keras.layers.Dense(8)(x)
+        x = tf.keras.layers.LSTM(1, activation='tanh')(x)
 
         # last layer is a linear (float) value - do not change
         outputs = tf.keras.layers.Dense(1, activation="linear")(x)

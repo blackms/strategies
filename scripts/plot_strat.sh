@@ -12,10 +12,27 @@ short=0
 leveraged=0
 
 
-#get date from 30 days ago (MacOS-specific)
-num_days=7
-start_date=$(date -j -v-${num_days}d +"%Y%m%d")
-end_date="$(date "+%Y%m%d")"
+num_days=3
+start_date=$(date +"%Y%m%d")
+
+set_start_date () {
+  # ndays="$1"
+
+  # Get the operating system name
+  os=$(uname)
+
+  # Check if the operating system is Darwin (macOS)
+  if [ "$os" = "Darwin" ]; then
+    # Use the -j -v option for BSD date command
+    start_date=$(date -j -v-${num_days}d +"%Y%m%d")
+  else
+    # Use the -d option for GNU date command
+    start_date=$(date -d "${num_days} days ago " +"%Y%m%d")
+  fi
+}
+
+#get date from num_days days ago
+set_start_date
 
 timerange="${start_date}-${end_date}"
 
@@ -52,7 +69,7 @@ while getopts :c:ln:st:-: OPT; do
   case "$OPT" in
     c | config )     needs_arg; config_file="$OPTARG" ;;
     l | leveraged )  leveraged=1 ;;
-    n | ndays )      needs_arg; num_days="$OPTARG"; timerange="$(date -j -v-${num_days}d +"%Y%m%d")-" ;;
+    n | ndays )      needs_arg; num_days="$OPTARG"; set_start_date; timerange="${start_date}-${today}" ;;
     s | short )      short=1 ;;
     t | timeframe )  needs_arg; timerange="$OPTARG" ;;
     ??* )            show_usage; die "Illegal option --$OPT" ;;  # bad long option
@@ -121,9 +138,13 @@ fi
 
 
 # adjust timerange to make sure there is an end date (which enables caching of data in backtesting)
-a=("${(@s/-/)timerange}")
-start=${a[1]}
-end=${a[2]}
+# a=("${(@s/-/)timerange}")
+# start=${a[1]}
+# end=${a[2]}
+
+start=$(echo $timerange | cut -d "-" -f 1)
+end=$(echo $timerange | cut -d "-" -f 2)
+
 # echo "timerange:${timerange} a:${a} start:${start} end:${end}"
 if [ -z "${end}" ]; then
   end="$(date "+%Y%m%d")"

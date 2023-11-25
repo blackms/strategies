@@ -29,13 +29,31 @@ Usage: zsh $script [options] [<exchange>]
 END
 }
 
+num_days=180
+start_date=$(date +"%Y%m%d")
 
-#get date from 180 days ago (MacOS-specific)
-num_days=750
-start_date=$(date -j -v-${num_days}d +"%Y%m%d")
+set_start_date () {
+  # ndays="$1"
+
+  # Get the operating system name
+  os=$(uname)
+
+  # Check if the operating system is Darwin (macOS)
+  if [ "$os" = "Darwin" ]; then
+    # Use the -j -v option for BSD date command
+    start_date=$(date -j -v-${num_days}d +"%Y%m%d")
+  else
+    # Use the -d option for GNU date command
+    start_date=$(date -d "${num_days} days ago " +"%Y%m%d")
+  fi
+}
+
+#get date from num_days days ago
+set_start_date
+
 timerange="${start_date}-"
 today=$(date +"%Y%m%d")
-num_days=180
+
 
 #fixed_args="-t 5m 15m 1h 1d"
 #fixed_args="-t 5m 15m 1h"
@@ -58,7 +76,7 @@ while getopts hln:s-: OPT; do
   case "$OPT" in
     h | help )       show_usage; exit 0 ;;
     l | leveraged )  leveraged=1 ;;
-    n | ndays )      needs_arg; num_days="$OPTARG"; timerange="$(date -j -v-${num_days}d +"%Y%m%d")-${today}" ;;
+    n | ndays )      needs_arg; num_days="$OPTARG"; set_start_date; timerange="${start_date}-${today}" ;;
     s | short )      short=1 ;;
     ??* )            show_usage; die "Illegal option --$OPT" ;;  # bad long option
     ? )              show_usage; die "Illegal option --$OPT" ;;  # bad short option (error reported via getopts)
@@ -77,7 +95,9 @@ for exchange in "${list[@]}"; do
   echo ""
 
   strat_dir="user_data/strategies/${exchange}"
-  config_file="${strat_dir}/config_${exchange}.json"
+  config_dir="user_data/strategies/config"
+  # config_file="${config_dir}/config_${exchange}.json"
+  config_file="${config_dir}/config.json"
 
   if [ ${short} -eq 1 ]; then
     fixed_args="--trading-mode futures ${fixed_args}"

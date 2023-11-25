@@ -16,8 +16,29 @@ curr_file="$0"
 # default values
 epochs=100
 spaces="sell"
+
 num_days=180
-start_date=$(date -j -v-${num_days}d +"%Y%m%d")
+start_date=$(date +"%Y%m%d")
+
+set_start_date () {
+  # ndays="$1"
+
+  # Get the operating system name
+  os=$(uname)
+
+  # Check if the operating system is Darwin (macOS)
+  if [ "$os" = "Darwin" ]; then
+    # Use the -j -v option for BSD date command
+    start_date=$(date -j -v-${num_days}d +"%Y%m%d")
+  else
+    # Use the -d option for GNU date command
+    start_date=$(date -d "${num_days} days ago " +"%Y%m%d")
+  fi
+}
+
+#get date from num_days days ago
+set_start_date
+
 today=$(date +"%Y%m%d")
 timerange="${start_date}-${today}"
 download=0
@@ -115,7 +136,7 @@ while getopts c:d:e:j:l:n:s:t:-: OPT; do
     e | epochs )     needs_arg; epochs="$OPTARG" ;;
     j | jobs )       needs_arg; jobs="$OPTARG" ;;
     l | loss )       needs_arg; lossf="$OPTARG" ;;
-    n | ndays )      needs_arg; num_days="$OPTARG"; timerange="$(date -j -v-${num_days}d +"%Y%m%d")-" ;;
+    n | ndays )      needs_arg; num_days="$OPTARG"; set_start_date; timerange="${start_date}-${today}" ;;
     s | spaces )     needs_arg; spaces="${OPTARG}" ;;
     t | timeframe )  needs_arg; timerange="$OPTARG" ;;
     \? )             show_usage; die "Illegal option --$OPT" ;;
@@ -179,6 +200,25 @@ if [[ $num_files -eq 0 ]]; then
 fi
 
 
+# calculate min trades
+# extract start & end dates from timerange
+# a=("${(@s/-/)timerange}")
+# start=${a[1]} # don't know why it's reversed
+# end=${a[0]}
+start=$(echo $timerange | cut -d "-" -f 1)
+end=$(echo $timerange | cut -d "-" -f 2)
+if [ -z "$end" ]; then
+  end="$(date "+%Y%m%d")"
+fi
+timerange="${start}-${end}"
+
+#echo "timerange:${timerange} start:${start} end:${end}"
+
+# calculate diff
+zmodload zsh/datetime
+diff=$(( ( $(strftime -r %Y%m%d "$end") - $(strftime -r %Y%m%d "$start") ) / 86400 ))
+min_trades=$((diff / 2))
+
 
 echo "" >$logfile
 add_line ""
@@ -223,11 +263,12 @@ for strat in ${strat_list//.py/}; do
   add_line ""
 
 
-#  if [[ "${spaces}" == "" ]]; then
-#    spaces=$space
-#  fi
+  #  if [[ "${spaces}" == "" ]]; then
+  #    spaces=$space
+  #  fi
+
   # run main hyperopt
-  args="${hargs} --epochs ${epochs} --space ${spaces} -s ${strat}"
+  args="${hargs} --epochs ${epochs} --space ${spaces} -s ${strat} --min-trades ${min_trades} "
   run_hyperopt ${args}
 
 done

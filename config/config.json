@@ -1,5 +1,5 @@
 {
-  "max_open_trades": 10,
+  "max_open_trades": 5,
   "stake_currency": "USDT",
   "dry_run_wallet": 10000,
   "stake_amount": 900,
@@ -20,18 +20,18 @@
     "order_book_top": 1,
     "price_last_balance": 0.0,
     "check_depth_of_market": {
-      "enabled": false,
-      "bids_to_ask_delta": 1
+        "enabled": false,
+        "bids_to_ask_delta": 1
     }
-  },
-  "exit_pricing": {
-    "price_side": "same",
+},
+"exit_pricing": {
+    "price_side": "other",
     "use_order_book": true,
     "order_book_top": 1
-  },
+},
   "order_types": {
     "entry": "limit",
-    "exit": "limit",
+    "exit": "market",
     "emergency_exit": "market",
     "force_exit": "market",
     "force_entry": "market",
@@ -50,16 +50,13 @@
     },
     "pair_whitelist": [
       "SOL/USDT",
-      "MATIC/USDT",
+      "XRP/USDT",
       "ADA/USDT",
       "DOGE/USDT",
       "LTC/USDT",
       "LINK/USDT",
-      // "ONE/USDT",
       "ATOM/USDT",
-      "GRT/USDT",
-      // "FET/USDT",
-      // "ACH/USDT",
+      "FET/USDT",
       "DOT/USDT",
       "ALGO/USDT"
     ],

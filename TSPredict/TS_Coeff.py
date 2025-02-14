@@ -46,6 +46,10 @@ sys.path.append(group_dir)
 # warnings.simplefilter(action='ignore', category=FutureWarning)
 
 import talib.abstract as ta
+import utils.custom_indicators as cta
+
+import utils.Wavelets as Wavelets
+import utils.Forecasters as Forecasters
 
 import pywt
 
@@ -60,18 +64,13 @@ class TS_Coeff(TSPredict):
 
     coeff_table = None
 
+    # wavelet_type = Wavelets.WaveletType.DWT
+
+    use_rolling = True
+
     def add_strategy_indicators(self, dataframe):
 
         # add some extra indicators
-
-        # Bollinger Bands
-        bollinger = qtpylib.bollinger_bands(dataframe['close'], window=20, stds=2)
-        dataframe['bb_lowerband'] = bollinger['lower']
-        dataframe['bb_middleband'] = bollinger['mid']
-        dataframe['bb_upperband'] = bollinger['upper']
-        dataframe['bb_width'] = ((dataframe['bb_upperband'] - dataframe['bb_lowerband']) / dataframe['bb_middleband'])
-        dataframe["bb_gain"] = ((dataframe["bb_upperband"] - dataframe["close"]) / dataframe["close"])
-        dataframe["bb_loss"] = ((dataframe["bb_lowerband"] - dataframe["close"]) / dataframe["close"])
 
         # MACD
         macd = ta.MACD(dataframe)
@@ -99,119 +98,17 @@ class TS_Coeff(TSPredict):
 
         df_norm = self.convert_dataframe(dataframe)
         gain_data = df_norm['gain'].to_numpy()
+        # gain_data = self.smooth(gain_data, 2)
         self.build_coefficient_table(gain_data)
-        data = self.merge_coeff_table(self.convert_dataframe(df_norm))
+        data = self.merge_coeff_table(df_norm)
         return data
 
-   #-------------
-
-    def create_model(self, df_shape):
-
-        # print("    creating new model using: XGBRegressor")
-        # params = {'n_estimators': 100, 'max_depth': 4, 'learning_rate': 0.1}
-        # self.model = XGBRegressor(**params)
-
-
-        # self.model = PassiveAggressiveRegressor(warm_start=True)
-        self.model = SGDRegressor(loss='huber')
-
-        print(f"    creating new model using: {type(self.model)}")
-
-        if self.model is None:
-            print("***    ERR: create_model() - model was not created ***")
-        return
-
-    ###################################
-
-    # DWT functions
- 
-    def madev(self, d, axis=None):
-        """ Mean absolute deviation of a signal """
-        return np.mean(np.absolute(d - np.mean(d, axis)), axis)
-
-
-    def dwtModel(self, data):
-
-        # the choice of wavelet makes a big difference
-        # for an overview, check out: https://www.kaggle.com/theoviel/denoising-with-direct-wavelet-transform
-        # wavelet = 'db1'
-        wavelet = 'db8'
-        # wavelet = 'bior1.1'
-        # wavelet = 'haar'  # deals well with harsh transitions
-        level = 1
-        wmode = "smooth"
-        tmode = "hard"
-        length = len(data)
-
-        # Apply DWT transform
-        coeff = pywt.wavedec(data, wavelet, mode=wmode)
-
-        # remove higher harmonics
-        std = np.std(coeff[level])
-        sigma = (1 / 0.6745) * self.madev(coeff[-level])
-        # sigma = madev(coeff[-level])
-        uthresh = sigma * np.sqrt(2 * np.log(length))
-
-        coeff[1:] = (pywt.threshold(i, value=uthresh, mode=tmode) for i in coeff[1:])
-
-        # inverse DWT transform
-        model = pywt.waverec(coeff, wavelet, mode=wmode)
-
-        # there is a known bug in waverec where odd numbered lengths result in an extra item at the end
-        diff = len(model) - len(data)
-        return model[0:len(model) - diff]
-    
-
-    def get_dwt(self, col):
-
-        a = np.array(col)
-
-        # # de-trend the data
-        # w_mean = a.mean()
-        # w_std = a.std()
-        # a_notrend = (a - w_mean) / w_std
-
-        # # get DWT model of data
-        # restored_sig = self.dwtModel(a_notrend)
-
-        # # re-trend
-        # dwt_model = (restored_sig * w_std) + w_mean
-
-        dwt_model = self.dwtModel(a)
-
-        return dwt_model
-
-    ###################################
-
-    # Coefficient functions
-    
-    # function to get  coefficients (override in subclass)
-    def get_coeffs(self, data: np.array) -> np.array:
-
-        num_items = 64
-
-        # this is a very naiive implementation that just does a polynomial fit and extrapolation
-        # replace this with more viable algorithms (DWT, SWT) in subclass
-        items = data[-num_items:]
-        x_values = np.arange(num_items)
-        y_values = items
-        coefficients = np.polyfit(x_values, y_values, 8)
-
-        # extrapolate by self.lookahead steps
-        f = np.poly1d(coefficients)
-        x_new = np.arange(num_items+self.lookahead)
-        y_new = f(x_new)
-
-        # print(f'coefficients:{coefficients}, y_new:{y_new}')
-        features = np.array((coefficients[0], coefficients[1], y_new[-1]))
-
-        return features
 
     #-------------
 
     # builds a numpy array of coefficients
     def build_coefficient_table(self, data: np.array):
-        
+
         # roll through the  data and create coefficients for each step
         nrows = np.shape(data)[0]
 
@@ -235,9 +132,10 @@ class TS_Coeff(TSPredict):
 
             # print(f"start:{start} end:{end} dest:{dest} len:{len(dslice)}")
 
-            features = self.get_coeffs(dslice)
+            coeffs = self.wavelet.get_coeffs(dslice)
+            features = self.wavelet.coeff_to_array(coeffs)
             # print(f'build_coefficient_table() features: {np.shape(features)}')
-            
+
             # initialise the np.array (need features first to know size)
             if not init_done:
                 init_done = True
@@ -263,6 +161,13 @@ class TS_Coeff(TSPredict):
     def merge_coeff_table(self, dataframe: DataFrame):
 
         # print(f'merge_coeff_table() self.coeff_table: {np.shape(self.coeff_table)}')
+
+        # # apply smoothing to each column, otherwise prediction alogorithms will struggle
+        # num_cols = np.shape(self.coeff_table)[1]
+        # for j in range (num_cols):
+        #     feature = self.coeff_table[:,j]
+        #     feature = self.smooth(feature, 2)
+        #     self.coeff_table[:,j] = feature
 
         num_coeffs = np.shape(self.coeff_table)[1]
 

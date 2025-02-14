@@ -71,7 +71,8 @@ class ClassifierKerasLinear(ClassifierKeras):
     def compile_model(self, model):
         # optimizer = tf.keras.optimizers.Adam(learning_rate=0.01)
         # workaround for tensorflow issues with Adam:
-        optimizer = tf.keras.optimizers.legacy.Adam(learning_rate=self.learning_rate)
+        # optimizer = tf.keras.optimizers.legacy.Adam(learning_rate=self.learning_rate)
+        optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
         # optimizer = tf.keras.optimizers.SGD(learning_rate=1, momentum=0.9)
         model.compile(metrics=['mae', 'mse'], loss='mse', optimizer=optimizer)
 
@@ -83,6 +84,7 @@ class ClassifierKerasLinear(ClassifierKeras):
         # lazy loading because params can change up to this point
         if self.model is None:
             # load saved model if present
+            # print('    Loading model')
             self.model = self.load()
 
         # print(f'is_trained:{self.is_trained} force_train:{force_train}')
@@ -95,10 +97,13 @@ class ClassifierKerasLinear(ClassifierKeras):
         if (self.model is not None) and \
             (self.model_is_trained()) and \
             (not force_train) and \
-            (not self.combine_models):
+            (not self.combine_models) or \
+                (
+                    self.model_is_trained() and (not new_model)
+                ):
             # (not self.combine_models or (not new_model)):
             # print(f"    SKipping training - is_trained:{self.is_trained} force_train:{force_train} new_model:{self.new_model} combine_models:{self.combine_models}")
-            print("    Model is already trained")
+            # print("    Model is already trained")
             return
 
 

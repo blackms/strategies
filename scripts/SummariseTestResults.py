@@ -14,7 +14,7 @@ import json
 infile = None
 curr_line = ""
 strat_results = {}
-market_change = None
+market_change = 0.0
 test_date = None
 num_test_days = 0
 exchange = ""
@@ -154,6 +154,7 @@ def process_totals(strat, line):
     entry['win_pct'] = float(cols[7].strip().split(" ")[-1])
     entry['expectancy'] = 0 # updated later
     entry['daily_profit'] = 0 # updated later
+    entry['vs_market'] = 0 # updated later
 
     strat_results[strat] = entry
 
@@ -208,7 +209,8 @@ def process_market_change(strat, line):
     cols.pop(0)
     cols.pop(len(cols) - 1)
 
-    market_change = str(cols[-1]).strip()
+    mkt_change = str(cols[-1]).strip()
+    market_change = float(mkt_change.strip("%"))
 
     return
 
@@ -222,13 +224,16 @@ def print_results(test_results):
     # convert associative array into 'plain' array
     strat_stats = []
     if test_results:
+            
         # calculate stats for each strategy
         for strategy in test_results:
+            test_results[strategy]['vs_market'] = test_results[strategy]['tot_profit'] - market_change
             strat_stats.append([strategy,
                                 test_results[strategy]['entries'],
                                 test_results[strategy]['daily_trades'],
                                 test_results[strategy]['ave_profit'],
                                 test_results[strategy]['tot_profit'],
+                                test_results[strategy]['vs_market'],
                                 test_results[strategy]['win_pct'],
                                 test_results[strategy]['expectancy'],
                                 test_results[strategy]['daily_profit'],
@@ -237,7 +242,7 @@ def print_results(test_results):
         # create dataframe
         df = pandas.DataFrame(strat_stats,
                               columns=["Strategy", "Trades", "Tr/day", "Average%",
-                                       "Total%", "Win%", "Expectancy", "Daily%", "Rank"])
+                                       "Total%", "vs Mkt%", "Win%", "Expectancy", "Daily%", "Rank"])
 
         rank1 = df["Tr/day"].rank(ascending=False, method='min', pct=False)
         rank2 = df["Average%"].rank(ascending=False, method='min', pct=False)
@@ -254,7 +259,7 @@ def print_results(test_results):
         print("")
         hdrs = df.columns.values
         print(tabulate(df.sort_values(by=['Rank', "Expectancy"], ascending=[True, False]),
-                       floatfmt=["", "d", ".2f", ".2f", ".2f", ".2f", ".2f", ".3f", ".0f"],
+                       floatfmt=["", "d", ".2f", ".2f", ".1f", ".1f", ".1f", ".2f", ".2f", ".0f"],
                        showindex="never", headers=hdrs, tablefmt='psql'))
 
     return
@@ -290,6 +295,7 @@ def main():
     global curr_line
     global infile
     global strat_results
+    global market_change
 
     args = sys.argv[1:]
 
@@ -333,10 +339,12 @@ def main():
                         if skipto('daily profit %', anywhere=True):
                             process_daily_profit(strat, curr_line.rstrip())
 
-                        if market_change is None:
+                        if market_change <= 0.0:
                             if skipto('Market change', anywhere=True):
                                 process_market_change(strat, curr_line.rstrip())
                                 print(f"Market Change:\t{market_change}")
+                            else:
+                                market_change = 0.0
 
                         # copyto('===============================')
                         skipto('===============================')
